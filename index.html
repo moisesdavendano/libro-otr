@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>📁 Libro de Trabajo OTR</title>
+  <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@4.30.0/lib/msal-browser.min.js"></script>
+  <style>
+    :root {
+      --font: 'Segoe UI', system-ui, sans-serif;
+      --bg: #f0f4f8; --surface: #ffffff; --border: #e2e8f0;
+      --text: #1e293b; --text-muted: #64748b; --primary: #3b82f6;
+      --radius: 10px; --shadow: 0 1px 4px rgba(0,0,0,.08), 0 4px 16px rgba(0,0,0,.06);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; }
+
+    /* ── HEADER ── */
+    .app-header {
+      background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+      color: #fff; padding: 14px 24px;
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    }
+    .app-header h1 { font-size: 1.3rem; font-weight: 700; letter-spacing: -.3px; }
+    .app-header .subtitle { font-size: .8rem; opacity: .7; }
+    .header-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* ── BUTTONS ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 14px; border-radius: 7px; font-size: .82rem; font-weight: 600;
+      cursor: pointer; border: none; transition: all .15s;
+    }
+    .btn:hover { filter: brightness(.92); transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn-primary  { background: #fff; color: #1e3a5f; }
+    .btn-success  { background: #22c55e; color: #fff; }
+    .btn-ghost    { background: rgba(255,255,255,.15); color: #fff; border: 1px solid rgba(255,255,255,.3); }
+    .btn-icon     { padding: 4px 7px; border-radius: 5px; border: none; cursor: pointer; font-size: 1rem; background: none; transition: background .12s; }
+    .btn-icon:hover { background: rgba(0,0,0,.08); }
+
+    /* ── LAYOUT ── */
+    .container { max-width: 1600px; margin: 0 auto; padding: 16px 20px; }
+
+    /* ── KPI CARDS ── */
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .kpi-card { background: var(--surface); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); border-left: 4px solid; }
+    .kpi-card.total    { border-color: #3b82f6; }
+    .kpi-card.pagado   { border-color: #22c55e; }
+    .kpi-card.pendiente{ border-color: #f59e0b; }
+    .kpi-card.atrasado { border-color: #ef4444; }
+    .kpi-label { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted); margin-bottom: 4px; }
+    .kpi-value { font-size: 1.2rem; font-weight: 700; }
+    .kpi-count { font-size: .75rem; color: var(--text-muted); margin-top: 2px; }
+
+    /* ── STATUS PILLS ── */
+    .status-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .status-pill {
+      display: flex; align-items: center; gap: 5px;
+      padding: 5px 12px; border-radius: 99px; font-size: .75rem; font-weight: 600;
+      cursor: pointer; border: 2px solid transparent; transition: all .15s; user-select: none;
+    }
+    .status-pill:hover, .status-pill.active { border-color: currentColor; }
+    .sp-cotiz  { background: #ede9fe; color: #6d28d9; }
+    .sp-oc     { background: #ffedd5; color: #c2410c; }
+    .sp-espera { background: #fef9c3; color: #a16207; }
+    .sp-atra   { background: #fee2e2; color: #dc2626; }
+    .sp-pago   { background: #dcfce7; color: #16a34a; }
+    .sp-all    { background: #f1f5f9; color: #475569; }
+
+    /* ── TOOLBAR ── */
+    .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+    .toolbar input, .toolbar select {
+      padding: 7px 12px; border: 1.5px solid var(--border); border-radius: 7px;
+      font-size: .82rem; background: var(--surface); color: var(--text); outline: none; transition: border .12s;
+    }
+    .toolbar input:focus, .toolbar select:focus { border-color: var(--primary); }
+    .toolbar input { min-width: 200px; }
+    .view-toggle { display: flex; border: 1.5px solid var(--border); border-radius: 7px; overflow: hidden; }
+    .view-btn { padding: 6px 12px; font-size: .78rem; font-weight: 600; border: none; background: var(--surface); color: var(--text-muted); cursor: pointer; transition: all .12s; }
+    .view-btn.active { background: var(--primary); color: #fff; }
+    .showing-count { margin-left: auto; font-size: .78rem; color: var(--text-muted); }
+
+    /* ── TABLE ── */
+    .table-wrap { overflow-x: auto; border-radius: var(--radius); box-shadow: var(--shadow); }
+    table { width: 100%; border-collapse: collapse; background: var(--surface); }
+    thead tr { background: #1e3a5f; color: #fff; }
+    th { padding: 10px 10px; text-align: left; font-size: .7rem; font-weight: 700; white-space: nowrap; letter-spacing: .3px; text-transform: uppercase; }
+    th:first-child { border-radius: 10px 0 0 0; }
+    th:last-child  { border-radius: 0 10px 0 0; }
+    td { padding: 7px 10px; border-bottom: 1px solid rgba(0,0,0,.04); white-space: nowrap; vertical-align: middle; font-size: .82rem; }
+    tr:last-child td { border-bottom: none; }
+
+    /* ── INLINE EDIT ── */
+    .cell-edit { cursor: pointer; position: relative; transition: background .12s; }
+    .cell-edit:hover { outline: 2px dashed #93c5fd; outline-offset: -2px; border-radius: 4px; }
+    .cell-edit:hover::after { content: ' ✏️'; font-size: .6rem; opacity: .5; }
+    .cell-edit-active { outline: 2px solid #3b82f6 !important; outline-offset: -2px; border-radius: 4px; background: #eff6ff !important; }
+    .inline-input { width: 100%; min-width: 90px; padding: 2px 4px; border: none; outline: none; font-size: .82rem; font-family: var(--font); background: transparent; color: var(--text); }
+    .inline-input[type="date"] { min-width: 128px; color-scheme: light; }
+
+    .td-money { text-align: right; font-variant-numeric: tabular-nums; }
+    .td-num   { color: var(--text-muted); font-size: .72rem; min-width: 28px; }
+    .td-empresa { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+    .date-overdue { color: #dc2626 !important; font-weight: 700; }
+
+    /* estado select */
+    .status-select { padding: 3px 6px; border-radius: 5px; font-size: .72rem; font-weight: 600; border: 1.5px solid; cursor: pointer; outline: none; max-width: 170px; }
+
+    /* ── MONTH VIEW ── */
+    #month-view { display: none; }
+    .month-group { margin-bottom: 24px; }
+    .month-header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; background: #1e3a5f; color: #fff; border-radius: 10px 10px 0 0; padding: 10px 16px; }
+    .month-title { font-size: 1rem; font-weight: 700; }
+    .month-stats { display: flex; gap: 16px; flex-wrap: wrap; font-size: .78rem; opacity: .9; }
+    .month-table-wrap { overflow-x: auto; border-radius: 0 0 10px 10px; box-shadow: var(--shadow); }
+
+    /* ── MODAL ── */
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 1000; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal { background: var(--surface); border-radius: 14px; width: 95%; max-width: 600px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.3); animation: slideUp .2s ease; }
+    @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 22px 14px; border-bottom: 1px solid var(--border); }
+    .modal-header h2 { font-size: 1.1rem; font-weight: 700; }
+    .modal-close { background: none; border: none; font-size: 1.4rem; cursor: pointer; color: var(--text-muted); padding: 2px 6px; border-radius: 5px; }
+    .modal-close:hover { background: #f1f5f9; }
+    .modal-body { padding: 18px 22px; }
+    .modal-footer { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+
+    /* ── FORM ── */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .form-grid .full { grid-column: 1 / -1; }
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-group label { font-size: .72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .3px; }
+    .form-group input, .form-group select {
+      padding: 9px 11px; border: 1.5px solid var(--border); border-radius: 7px;
+      font-size: .88rem; color: var(--text); background: var(--surface);
+      outline: none; transition: border .12s; font-family: var(--font); color-scheme: light;
+    }
+    .form-group input:focus, .form-group select:focus { border-color: var(--primary); }
+
+    .iva-display { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 12px; background: #f8fafc; border: 1.5px solid var(--border); border-radius: 7px; margin-top: 4px; }
+    .iva-item .lbl { font-size: .68rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); }
+    .iva-item .val { font-size: .95rem; font-weight: 700; }
+
+    /* ── EMPTY ── */
+    .empty-state { text-align: center; padding: 48px 20px; color: var(--text-muted); }
+    .empty-state .icon { font-size: 3rem; margin-bottom: 10px; }
+
+    /* ── TOAST ── */
+    #toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px);
+      background: #1e293b; color: #fff; padding: 10px 20px; border-radius: 8px;
+      font-size: .85rem; font-weight: 600; z-index: 9999;
+      transition: transform .25s, opacity .25s; opacity: 0; pointer-events: none;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+    /* ── SYNC ONEDRIVE ── */
+    .btn-sync.ok      { background: rgba(34,197,94,.25);  border-color: rgba(134,239,172,.6); }
+    .btn-sync.busy    { background: rgba(250,204,21,.25); border-color: rgba(253,224,71,.6); }
+    .btn-sync.warn    { background: rgba(239,68,68,.35);  border-color: rgba(252,165,165,.7); }
+    .sync-banner { display: none; align-items: center; gap: 12px; flex-wrap: wrap; background: #eff6ff; border: 1.5px solid #bfdbfe; color: #1e3a5f; border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px; font-size: .85rem; }
+    .sync-banner.show { display: flex; }
+    .sync-banner .btn { background: #2563eb; color: #fff; }
+
+    @media (max-width: 600px) {
+      .form-grid { grid-template-columns: 1fr; }
+      .form-grid .full { grid-column: 1; }
+      .kpi-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="app-header">
+  <div>
+    <h1>📁 Libro de Trabajo OTR</h1>
+    <div class="subtitle" id="header-date"></div>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-primary" onclick="openAdd()">➕ Nuevo Trabajo</button>
+    <button class="btn btn-ghost" onclick="exportarHTML()">📤 Exportar para Papá</button>
+    <button class="btn btn-ghost" onclick="respaldarJSON()">💾 Respaldo</button>
+    <button class="btn btn-ghost" onclick="document.getElementById('file-restore').click()">📥 Restaurar</button>
+    <input type="file" id="file-restore" accept=".json,application/json" style="display:none" onchange="restaurarJSON(this)">
+    <button class="btn btn-ghost btn-sync" id="sync-btn" onclick="Sync.onClick()">☁️ OneDrive</button>
+    <button class="btn btn-ghost" id="sync-logout" onclick="Sync.logout()" title="Desconectar OneDrive en este equipo" style="display:none">🚪</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Aviso de conexión -->
+  <div class="sync-banner" id="sync-banner">
+    <span id="sync-banner-text">☁️ Conecta tu OneDrive para ver y guardar tus trabajos en todos tus equipos.</span>
+    <button class="btn" onclick="Sync.login()">Iniciar sesión con Microsoft</button>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid">
+    <div class="kpi-card total">
+      <div class="kpi-label">Total Facturado</div>
+      <div class="kpi-value" id="kpi-total">$0</div>
+      <div class="kpi-count" id="kpi-total-n"></div>
+    </div>
+    <div class="kpi-card pagado">
+      <div class="kpi-label">Cobrado / Pagado</div>
+      <div class="kpi-value" id="kpi-pagado">$0</div>
+      <div class="kpi-count" id="kpi-pagado-n"></div>
+    </div>
+    <div class="kpi-card pendiente">
+      <div class="kpi-label">Por Cobrar</div>
+      <div class="kpi-value" id="kpi-pendiente">$0</div>
+      <div class="kpi-count" id="kpi-pendiente-n"></div>
+    </div>
+    <div class="kpi-card atrasado">
+      <div class="kpi-label">Atrasado</div>
+      <div class="kpi-value" id="kpi-atrasado">$0</div>
+      <div class="kpi-count" id="kpi-atrasado-n"></div>
+    </div>
+  </div>
+
+  <!-- Pills -->
+  <div class="status-bar">
+    <div class="status-pill sp-all active" onclick="quickFilter(this,'')">🗂️ Todos <span id="count-all">0</span></div>
+    <div class="status-pill sp-cotiz" onclick="quickFilter(this,'pendiente-cotizacion')">📋 P. Cotización <span id="count-pendiente-cotizacion">0</span></div>
+    <div class="status-pill sp-oc" onclick="quickFilter(this,'pendiente-oc')">📄 P. OC <span id="count-pendiente-oc">0</span></div>
+    <div class="status-pill sp-espera" onclick="quickFilter(this,'espera-pago')">⏳ Espera Pago <span id="count-espera-pago">0</span></div>
+    <div class="status-pill sp-atra" onclick="quickFilter(this,'atrasado')">🔴 Atrasado <span id="count-atrasado">0</span></div>
+    <div class="status-pill sp-pago" onclick="quickFilter(this,'pagado')">✅ Pagado <span id="count-pagado">0</span></div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <input type="text" placeholder="🔍 Buscar empresa, responsable, factura…" oninput="onSearch(this.value)" />
+    <select id="mes-select" onchange="onMesChange(this.value)">
+      <option value="">📅 Todos los meses</option>
+    </select>
+    <div class="view-toggle">
+      <button class="view-btn active" onclick="setView('ultimos20',this)">Últimos 20</button>
+      <button class="view-btn" onclick="setView('todos',this)">Todos</button>
+      <button class="view-btn" onclick="setView('por-mes',this)">Por Mes</button>
+    </div>
+    <span class="showing-count" id="showing-count"></span>
+  </div>
+
+  <!-- Tabla plana -->
+  <div id="table-view">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Fecha Trabajo</th>
+            <th>Empresa</th>
+            <th>Responsable</th>
+            <th title="Click para editar">Cotización ✏️</th>
+            <th title="Click para editar">OC ✏️</th>
+            <th title="Click para editar">N° Factura ✏️</th>
+            <th title="Click para editar">Fecha Factura ✏️</th>
+            <th>Pago Esperado</th>
+            <th>Total c/IVA</th>
+            <th>IVA 19%</th>
+            <th>Neto s/IVA</th>
+            <th>Estado</th>
+            <th>⚙</th>
+          </tr>
+        </thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Vista por mes -->
+  <div id="month-view"></div>
+
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModalOnBg(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modal-title">Nuevo Trabajo</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="trabajo-form" onsubmit="submitForm(event)">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>📅 Fecha de Trabajo *</label>
+            <input type="date" id="f-fechaTrabajo" required />
+          </div>
+          <div class="form-group">
+            <label>🏢 Empresa *</label>
+            <input type="text" id="f-empresa" placeholder="Nombre empresa" required />
+          </div>
+          <div class="form-group full">
+            <label>👤 Responsable / Contacto *</label>
+            <input type="text" id="f-responsable" placeholder="Nombre del contacto" required />
+          </div>
+          <div class="form-group">
+            <label>📋 N° Cotización</label>
+            <input type="text" id="f-cotizacion" placeholder="COT-001" />
+          </div>
+          <div class="form-group">
+            <label>📄 N° OC</label>
+            <input type="text" id="f-oc" placeholder="OC-12345" />
+          </div>
+          <div class="form-group">
+            <label>🧾 N° Factura</label>
+            <input type="text" id="f-nFactura" placeholder="1428" />
+          </div>
+          <div class="form-group">
+            <label>📆 Fecha Factura</label>
+            <input type="date" id="f-fechaFactura" oninput="autoFechaPago()" />
+          </div>
+          <div class="form-group">
+            <label>⏰ Pago Esperado <small style="opacity:.65">(auto +30d)</small></label>
+            <input type="date" id="f-fechaPagoEsperada" />
+          </div>
+          <div class="form-group">
+            <label>🚦 Estado</label>
+            <select id="f-estado">
+              <option value="pendiente-cotizacion">📋 Pendiente Cotización</option>
+              <option value="pendiente-oc">📄 Pendiente OC</option>
+              <option value="espera-pago">⏳ Espera de Pago</option>
+              <option value="atrasado">🔴 Atrasado</option>
+              <option value="pagado">✅ Pagado</option>
+            </select>
+          </div>
+          <div class="form-group full">
+            <label>💰 Monto Total con IVA *</label>
+            <input type="number" id="f-montoConIVA" placeholder="Ej: 1190000" min="0" step="1" oninput="recalcIVA()" required />
+            <div class="iva-display">
+              <div class="iva-item">
+                <div class="lbl">🧾 IVA (19%)</div>
+                <div class="val" id="disp-iva">$0</div>
+              </div>
+              <div class="iva-item">
+                <div class="lbl">💵 Neto sin IVA</div>
+                <div class="val" id="disp-neto">$0</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" style="background:#f1f5f9;color:#475569" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-success" onclick="document.getElementById('trabajo-form').dispatchEvent(new Event('submit',{cancelable:true,bubbles:true}))">💾 Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+// ══════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════
+const IVA_RATE     = 0.19;
+const PAYMENT_DAYS = 30;
+const STORAGE_KEY  = 'otr_trabajos_2026';
+
+// OneDrive: ID de la aplicación registrada en Microsoft (ver GUIA_INSTALACION)
+const MS_CLIENT_ID = '';
+const SYNC_FILE    = 'libro_otr.json';
+const SYNC_SCOPES  = ['Files.ReadWrite.AppFolder'];
+
+const ESTADOS = {
+  'pendiente-cotizacion': { label:'Pendiente Cotización', icon:'📋', rowBg:'#f5f3ff', badge:'#6d28d9', badgeBg:'#ede9fe', bd:'#c4b5fd' },
+  'pendiente-oc':         { label:'Pendiente OC',         icon:'📄', rowBg:'#fff7ed', badge:'#c2410c', badgeBg:'#ffedd5', bd:'#fdba74' },
+  'espera-pago':          { label:'Espera de Pago',       icon:'⏳', rowBg:'#fefce8', badge:'#a16207', badgeBg:'#fef9c3', bd:'#fde047' },
+  'atrasado':             { label:'Atrasado',             icon:'🔴', rowBg:'#fff1f2', badge:'#dc2626', badgeBg:'#fee2e2', bd:'#fca5a5' },
+  'pagado':               { label:'Pagado',               icon:'✅', rowBg:'#f0fdf4', badge:'#16a34a', badgeBg:'#dcfce7', bd:'#86efac' },
+};
+
+// ══════════════════════════════════════
+// ESTADO GLOBAL
+// ══════════════════════════════════════
+let trabajos     = [];
+let viewMode     = 'ultimos20';
+let filterMes    = '';
+let filterEstado = '';
+let searchText   = '';
+let editingId    = null;
+
+// ══════════════════════════════════════
+// PERSISTENCIA
+// ══════════════════════════════════════
+function loadData() {
+  try { trabajos = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+  catch(e) { trabajos = []; }
+}
+function saveData() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(trabajos));
+  Sync.markDirty();
+}
+
+// ══════════════════════════════════════
+// CÁLCULOS
+// ══════════════════════════════════════
+function calcIVA(montoConIVA) {
+  const total = Math.round(parseFloat(montoConIVA) || 0);
+  const neto  = Math.round(total / (1 + IVA_RATE));
+  return { total, neto, iva: total - neto };
+}
+function addDays(dateStr, days) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T12:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().split('T')[0];
+}
+function today() { return new Date().toISOString().split('T')[0]; }
+function isOverdue(t) {
+  if (t.estado === 'pagado') return false;
+  const exp = t.fechaPagoEsperada || addDays(t.fechaFactura, PAYMENT_DAYS);
+  return !!(exp && exp < today());
+}
+function efectivo(t) {
+  if (t.estado === 'pagado') return 'pagado';
+  if (isOverdue(t)) return 'atrasado';
+  return t.estado || 'pendiente-cotizacion';
+}
+
+// ══════════════════════════════════════
+// FORMATO
+// ══════════════════════════════════════
+function fCLP(n) {
+  return new Intl.NumberFormat('es-CL', { style:'currency', currency:'CLP', maximumFractionDigits:0 }).format(n||0);
+}
+function fDate(s) {
+  if (!s) return '—';
+  const [y,m,d] = s.split('-');
+  return `${d}/${m}/${y}`;
+}
+function monthKey(t)  { const d=t.fechaTrabajo||t.fechaFactura||''; return d?d.slice(0,7):'sin-fecha'; }
+function monthLabel(k){ if(k==='sin-fecha') return 'Sin fecha'; const [y,m]=k.split('-'); const M=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']; return `${M[+m-1]} ${y}`; }
+function esc(s)       { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ══════════════════════════════════════
+// FILTROS
+// ══════════════════════════════════════
+function getFiltered() {
+  let list = [...trabajos];
+  if (filterMes)    list = list.filter(t => monthKey(t) === filterMes);
+  if (filterEstado) list = list.filter(t => efectivo(t) === filterEstado);
+  if (searchText) {
+    const q = searchText.toLowerCase();
+    list = list.filter(t =>
+      (t.empresa||'').toLowerCase().includes(q) ||
+      (t.responsable||'').toLowerCase().includes(q) ||
+      (t.nFactura||'').toLowerCase().includes(q) ||
+      (t.cotizacion||'').toLowerCase().includes(q) ||
+      (t.oc||'').toLowerCase().includes(q)
+    );
+  }
+  return list;
+}
+
+// ══════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════
+function render() {
+  renderKPIs();
+  renderStatusCounts();
+  updateMonthFilter();
+  viewMode === 'por-mes' ? renderByMonth() : renderTable();
+}
+
+function renderKPIs() {
+  const all    = trabajos;
+  const total  = all.reduce((s,t) => s+calcIVA(t.montoConIVA).total, 0);
+  const pagado = all.filter(t=>t.estado==='pagado').reduce((s,t) => s+calcIVA(t.montoConIVA).total, 0);
+  const atra   = all.filter(t=>isOverdue(t)).reduce((s,t) => s+calcIVA(t.montoConIVA).total, 0);
+  document.getElementById('kpi-total').textContent      = fCLP(total);
+  document.getElementById('kpi-pagado').textContent     = fCLP(pagado);
+  document.getElementById('kpi-pendiente').textContent  = fCLP(total-pagado);
+  document.getElementById('kpi-atrasado').textContent   = fCLP(atra);
+  document.getElementById('kpi-total-n').textContent    = `${all.length} trabajos`;
+  document.getElementById('kpi-pagado-n').textContent   = `${all.filter(t=>t.estado==='pagado').length} cobrados`;
+  document.getElementById('kpi-pendiente-n').textContent= `${all.filter(t=>t.estado!=='pagado').length} pendientes`;
+  document.getElementById('kpi-atrasado-n').textContent = `${all.filter(t=>isOverdue(t)).length} con atraso`;
+}
+
+function renderStatusCounts() {
+  const c = {'pendiente-cotizacion':0,'pendiente-oc':0,'espera-pago':0,'atrasado':0,'pagado':0};
+  trabajos.forEach(t => { const e=efectivo(t); if(c[e]!==undefined) c[e]++; });
+  document.getElementById('count-all').textContent = trabajos.length;
+  Object.keys(c).forEach(k => { const el=document.getElementById('count-'+k); if(el) el.textContent=c[k]; });
+}
+
+function updateMonthFilter() {
+  const keys=[...new Set(trabajos.map(t=>monthKey(t)).filter(k=>k!=='sin-fecha'))].sort().reverse();
+  const sel=document.getElementById('mes-select'), cur=sel.value;
+  sel.innerHTML='<option value="">📅 Todos los meses</option>'+
+    keys.map(k=>`<option value="${k}"${k===cur?' selected':''}>${monthLabel(k)}</option>`).join('');
+}
+
+// ── Tabla plana ──
+function renderTable() {
+  const filtered = getFiltered();
+  const display  = viewMode==='ultimos20' ? filtered.slice(0,20) : filtered;
+  const tbody    = document.getElementById('table-body');
+
+  if (display.length===0) {
+    tbody.innerHTML=`<tr><td colspan="14"><div class="empty-state"><div class="icon">📂</div><div>Sin registros.</div></div></td></tr>`;
+  } else {
+    tbody.innerHTML = display.map((t,i)=>renderRow(t,i+1)).join('');
+  }
+  document.getElementById('table-view').style.display='';
+  document.getElementById('month-view').style.display='none';
+  document.getElementById('showing-count').textContent=
+    viewMode==='ultimos20' && filtered.length>20
+      ? `Últimos 20 de ${filtered.length}`
+      : `${display.length} de ${trabajos.length}`;
+}
+
+function renderRow(t, num) {
+  const est  = efectivo(t);
+  const info = ESTADOS[est]||ESTADOS['pendiente-cotizacion'];
+  const calc = calcIVA(t.montoConIVA);
+  const fpe  = t.fechaPagoEsperada||addDays(t.fechaFactura,PAYMENT_DAYS);
+  const over = isOverdue(t);
+  const id   = esc(t.id);
+  const opts = Object.entries(ESTADOS).map(([k,v])=>
+    `<option value="${k}"${t.estado===k?' selected':''}>${v.icon} ${v.label}</option>`
+  ).join('');
+
+  return `
+  <tr style="background:${info.rowBg}" data-id="${id}">
+    <td class="td-num">${num}</td>
+    <td>${fDate(t.fechaTrabajo)}</td>
+    <td class="td-empresa" title="${esc(t.empresa)}"><strong>${esc(t.empresa||'—')}</strong></td>
+    <td>${esc(t.responsable||'—')}</td>
+    <td class="cell-edit" onclick="startEdit(this,'${id}','cotizacion','text')">${esc(t.cotizacion||'—')}</td>
+    <td class="cell-edit" onclick="startEdit(this,'${id}','oc','text')">${esc(t.oc||'—')}</td>
+    <td class="cell-edit" onclick="startEdit(this,'${id}','nFactura','text')">${esc(t.nFactura||'—')}</td>
+    <td class="cell-edit" onclick="startEdit(this,'${id}','fechaFactura','date')">${fDate(t.fechaFactura)}</td>
+    <td class="${over?'date-overdue':''}">${fDate(fpe)}${over?' ⚠️':''}</td>
+    <td class="td-money"><strong>${fCLP(calc.total)}</strong></td>
+    <td class="td-money" style="color:#64748b">${fCLP(calc.iva)}</td>
+    <td class="td-money">${fCLP(calc.neto)}</td>
+    <td>
+      <select class="status-select"
+        style="color:${info.badge};background:${info.badgeBg};border-color:${info.bd}"
+        onchange="changeEstado('${id}',this.value)">
+        ${opts}
+      </select>
+    </td>
+    <td>
+      <button class="btn-icon" onclick="openEdit('${id}')" title="Editar completo">✏️</button>
+      <button class="btn-icon" onclick="deleteTrabajo('${id}')" title="Eliminar">🗑️</button>
+    </td>
+  </tr>`;
+}
+
+// ── Vista por mes ──
+const TH_COLS = `<th>#</th><th>Fecha Trabajo</th><th>Empresa</th><th>Responsable</th>
+  <th>Cotización ✏️</th><th>OC ✏️</th><th>N° Factura ✏️</th><th>Fecha Factura ✏️</th>
+  <th>Pago Esperado</th><th>Total c/IVA</th><th>IVA 19%</th><th>Neto s/IVA</th>
+  <th>Estado</th><th>⚙</th>`;
+
+function renderByMonth() {
+  const filtered=getFiltered(), grouped={};
+  filtered.forEach(t=>{const k=monthKey(t);(grouped[k]||(grouped[k]=[])).push(t);});
+  const keys=Object.keys(grouped).sort().reverse();
+
+  const container=document.getElementById('month-view');
+  container.innerHTML=keys.length===0
+    ? '<div class="empty-state"><div class="icon">📂</div><div>Sin registros.</div></div>'
+    : keys.map(k=>{
+        const items=grouped[k];
+        const total=items.reduce((s,t)=>s+calcIVA(t.montoConIVA).total,0);
+        const pagado=items.filter(t=>t.estado==='pagado').reduce((s,t)=>s+calcIVA(t.montoConIVA).total,0);
+        const pend=total-pagado;
+        return `
+        <div class="month-group">
+          <div class="month-header">
+            <span class="month-title">📅 ${monthLabel(k)}</span>
+            <div class="month-stats">
+              <span>🗂️ ${items.length} trabajo${items.length!==1?'s':''}</span>
+              <span>💰 <strong>${fCLP(total)}</strong></span>
+              <span style="color:#86efac">✅ <strong>${fCLP(pagado)}</strong></span>
+              ${pend>0?`<span style="color:#fde047">⏳ <strong>${fCLP(pend)}</strong></span>`:''}
+            </div>
+          </div>
+          <div class="month-table-wrap">
+            <table>
+              <thead><tr>${TH_COLS}</tr></thead>
+              <tbody>${items.map((t,i)=>renderRow(t,i+1)).join('')}</tbody>
+            </table>
+          </div>
+        </div>`;
+      }).join('');
+
+  document.getElementById('table-view').style.display='none';
+  document.getElementById('month-view').style.display='';
+  document.getElementById('showing-count').textContent=`${keys.length} meses · ${filtered.length} trabajos`;
+}
+
+// ══════════════════════════════════════
+// EDICIÓN INLINE
+// ══════════════════════════════════════
+function startEdit(cell, id, field, type) {
+  if (cell.querySelector('input')) return;
+  const t = trabajos.find(x=>x.id===id);
+  if (!t) return;
+
+  cell.classList.add('cell-edit-active');
+  const prevHTML = cell.innerHTML;
+
+  const input   = document.createElement('input');
+  input.type    = type==='date' ? 'date' : 'text';
+  input.value   = t[field]||'';
+  input.className='inline-input';
+  input.onclick = e=>e.stopPropagation();
+
+  cell.textContent='';
+  cell.appendChild(input);
+  input.focus();
+  if (type==='date') { try { input.showPicker(); } catch(e){} }
+
+  let saved=false;
+
+  const save=()=>{
+    if (saved) return; saved=true;
+    const val=input.value.trim();
+    // la lista pudo refrescarse desde OneDrive mientras se editaba
+    const cur=trabajos.find(x=>x.id===id)||t;
+    cur[field]=val;
+    if (field==='fechaFactura' && val && !cur.fechaPagoEsperada)
+      cur.fechaPagoEsperada=addDays(val,PAYMENT_DAYS);
+    saveData();
+    cell.classList.remove('cell-edit-active');
+    cell.textContent=type==='date'?fDate(val):(val||'—');
+    // Actualizar celda de pago esperado si cambió fecha factura
+    if (field==='fechaFactura') {
+      const row=cell.closest('tr');
+      if (row) {
+        const fpe=t.fechaPagoEsperada||addDays(val,PAYMENT_DAYS);
+        const over=isOverdue(t);
+        const cells=row.querySelectorAll('td');
+        if (cells[8]) {
+          cells[8].className=over?'date-overdue':'';
+          cells[8].textContent=fDate(fpe)+(over?' ⚠️':'');
+        }
+      }
+    }
+    toast(`💾 ${fieldLabel(field)} guardado`);
+  };
+
+  input.addEventListener('blur',save);
+  input.addEventListener('keydown',e=>{
+    if (e.key==='Enter')  { e.preventDefault(); input.blur(); }
+    if (e.key==='Escape') { saved=true; input.removeEventListener('blur',save); cell.classList.remove('cell-edit-active'); cell.innerHTML=prevHTML; cell.onclick=()=>startEdit(cell,id,field,type); }
+  });
+}
+
+function fieldLabel(f){
+  return {cotizacion:'Cotización',oc:'OC',nFactura:'N° Factura',fechaFactura:'Fecha Factura'}[f]||f;
+}
+
+// ══════════════════════════════════════
+// ACCIONES
+// ══════════════════════════════════════
+function changeEstado(id, nuevoEstado) {
+  const t=trabajos.find(x=>x.id===id);
+  if (!t) return;
+  t.estado=nuevoEstado;
+  saveData(); render();
+  toast(`✅ Estado: ${ESTADOS[nuevoEstado]?.label||nuevoEstado}`);
+}
+function deleteTrabajo(id) {
+  if (!confirm('¿Eliminar este trabajo?')) return;
+  trabajos=trabajos.filter(t=>t.id!==id);
+  saveData(); render();
+  toast('🗑️ Eliminado');
+}
+
+// ══════════════════════════════════════
+// MODAL
+// ══════════════════════════════════════
+function openAdd() {
+  editingId=null;
+  document.getElementById('modal-title').textContent='➕ Nuevo Trabajo';
+  document.getElementById('trabajo-form').reset();
+  document.getElementById('f-fechaTrabajo').value=today();
+  document.getElementById('f-estado').value='pendiente-cotizacion';
+  document.getElementById('disp-iva').textContent='$0';
+  document.getElementById('disp-neto').textContent='$0';
+  openModal();
+}
+function openEdit(id) {
+  editingId=id;
+  const t=trabajos.find(x=>x.id===id);
+  if (!t) return;
+  document.getElementById('modal-title').textContent='✏️ Editar Trabajo';
+  document.getElementById('f-fechaTrabajo').value      =t.fechaTrabajo||'';
+  document.getElementById('f-empresa').value           =t.empresa||'';
+  document.getElementById('f-responsable').value       =t.responsable||'';
+  document.getElementById('f-cotizacion').value        =t.cotizacion||'';
+  document.getElementById('f-oc').value                =t.oc||'';
+  document.getElementById('f-nFactura').value          =t.nFactura||'';
+  document.getElementById('f-fechaFactura').value      =t.fechaFactura||'';
+  document.getElementById('f-fechaPagoEsperada').value =t.fechaPagoEsperada||'';
+  document.getElementById('f-montoConIVA').value       =t.montoConIVA||'';
+  document.getElementById('f-estado').value            =t.estado||'pendiente-cotizacion';
+  recalcIVA(); openModal();
+}
+function openModal()       { document.getElementById('modal-overlay').classList.add('open'); }
+function closeModal()      { document.getElementById('modal-overlay').classList.remove('open'); }
+function closeModalOnBg(e) { if(e.target===document.getElementById('modal-overlay')) closeModal(); }
+
+function submitForm(e) {
+  e.preventDefault();
+  const fechaFactura      =document.getElementById('f-fechaFactura').value;
+  const fechaPagoEsperada =document.getElementById('f-fechaPagoEsperada').value||addDays(fechaFactura,PAYMENT_DAYS);
+  const data={
+    fechaTrabajo:   document.getElementById('f-fechaTrabajo').value,
+    empresa:        document.getElementById('f-empresa').value.trim(),
+    responsable:    document.getElementById('f-responsable').value.trim(),
+    cotizacion:     document.getElementById('f-cotizacion').value.trim(),
+    oc:             document.getElementById('f-oc').value.trim(),
+    nFactura:       document.getElementById('f-nFactura').value.trim(),
+    fechaFactura,
+    fechaPagoEsperada,
+    montoConIVA:    parseFloat(document.getElementById('f-montoConIVA').value)||0,
+    estado:         document.getElementById('f-estado').value,
+  };
+  if (editingId) {
+    const idx=trabajos.findIndex(t=>t.id===editingId);
+    if (idx>=0) trabajos[idx]={...trabajos[idx],...data};
+    toast('✏️ Actualizado');
+  } else {
+    trabajos.unshift({id:Date.now().toString(),...data,createdAt:new Date().toISOString()});
+    toast('✅ Agregado');
+  }
+  saveData(); closeModal(); render();
+}
+
+// ══════════════════════════════════════
+// FORM HELPERS
+// ══════════════════════════════════════
+function recalcIVA(){
+  const c=calcIVA(document.getElementById('f-montoConIVA').value);
+  document.getElementById('disp-iva').textContent=fCLP(c.iva);
+  document.getElementById('disp-neto').textContent=fCLP(c.neto);
+}
+function autoFechaPago(){
+  const ff=document.getElementById('f-fechaFactura').value;
+  const fpe=document.getElementById('f-fechaPagoEsperada');
+  if(ff&&!fpe.value) fpe.value=addDays(ff,PAYMENT_DAYS);
+}
+
+// ══════════════════════════════════════
+// CONTROLES
+// ══════════════════════════════════════
+function setView(mode,btn){
+  viewMode=mode;
+  document.querySelectorAll('.view-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); render();
+}
+function quickFilter(el,estado){
+  filterEstado=estado;
+  document.querySelectorAll('.status-pill').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active'); render();
+}
+function onMesChange(val){ filterMes=val; render(); }
+function onSearch(val)   { searchText=val; render(); }
+
+// ══════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════
+let _tt;
+function toast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  clearTimeout(_tt); _tt=setTimeout(()=>el.classList.remove('show'),2500);
+}
+
+// ══════════════════════════════════════
+// EXPORTAR HTML (solo lectura — para papá)
+// ══════════════════════════════════════
+function exportarHTML(){
+  const fecha=new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'long',year:'numeric'});
+  const totTotal =trabajos.reduce((s,t)=>s+calcIVA(t.montoConIVA).total,0);
+  const totPagado=trabajos.filter(t=>t.estado==='pagado').reduce((s,t)=>s+calcIVA(t.montoConIVA).total,0);
+  const totPend  =totTotal-totPagado;
+  const totAtra  =trabajos.filter(t=>isOverdue(t)).reduce((s,t)=>s+calcIVA(t.montoConIVA).total,0);
+
+  const rows=trabajos.map((t,i)=>{
+    const est=efectivo(t), info=ESTADOS[est], calc=calcIVA(t.montoConIVA);
+    const fpe=t.fechaPagoEsperada||addDays(t.fechaFactura,PAYMENT_DAYS);
+    const over=isOverdue(t);
+    return `<tr style="background:${info.rowBg}">
+      <td style="color:#64748b;font-size:.72rem">${i+1}</td>
+      <td>${fDate(t.fechaTrabajo)}</td>
+      <td><strong>${esc(t.empresa||'—')}</strong></td>
+      <td>${esc(t.responsable||'—')}</td>
+      <td>${esc(t.cotizacion||'—')}</td>
+      <td>${esc(t.oc||'—')}</td>
+      <td>${esc(t.nFactura||'—')}</td>
+      <td>${fDate(t.fechaFactura)}</td>
+      <td style="${over?'color:#dc2626;font-weight:700':''}">${fDate(fpe)}${over?' ⚠️':''}</td>
+      <td style="text-align:right;font-weight:700">${fCLP(calc.total)}</td>
+      <td style="text-align:right;color:#64748b">${fCLP(calc.iva)}</td>
+      <td style="text-align:right">${fCLP(calc.neto)}</td>
+      <td><span style="display:inline-block;padding:3px 9px;border-radius:99px;font-size:.7rem;font-weight:700;background:${info.badgeBg};color:${info.badge}">${info.icon} ${info.label}</span></td>
+    </tr>`;
+  }).join('');
+
+  const html=`<!DOCTYPE html>
+<html lang="es"><head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>OTR — ${fecha}</title>
+  <style>
+    body{font-family:system-ui,sans-serif;background:#f0f4f8;color:#1e293b;margin:0}
+    .hdr{background:linear-gradient(135deg,#1e3a5f,#2563eb);color:#fff;padding:18px 28px}
+    .hdr h1{font-size:1.3rem;margin:0}.hdr p{opacity:.7;font-size:.82rem;margin:4px 0 0}
+    .body{max-width:1400px;margin:0 auto;padding:20px}
+    .kpis{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+    .kpi{background:#fff;border-radius:10px;padding:12px 16px;flex:1;min-width:130px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+    .kpi.a{border-left:4px solid #3b82f6}.kpi.b{border-left:4px solid #22c55e}.kpi.c{border-left:4px solid #f59e0b}.kpi.d{border-left:4px solid #ef4444}
+    .kl{font-size:.68rem;font-weight:700;text-transform:uppercase;color:#64748b;margin-bottom:3px}.kv{font-size:1.1rem;font-weight:800}
+    .leg{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+    .li{display:flex;align-items:center;gap:5px;font-size:.75rem;font-weight:600}
+    .ld{width:12px;height:12px;border-radius:3px}
+    .tw{overflow-x:auto;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+    table{width:100%;border-collapse:collapse;background:#fff}
+    thead tr{background:#1e3a5f;color:#fff}
+    th{padding:8px 10px;text-align:left;font-size:.68rem;font-weight:700;text-transform:uppercase;white-space:nowrap}
+    td{padding:7px 10px;border-bottom:1px solid rgba(0,0,0,.04);white-space:nowrap;font-size:.8rem;vertical-align:middle}
+    tr:last-child td{border-bottom:none}
+    .ft{text-align:center;color:#94a3b8;font-size:.72rem;padding:16px}
+  </style>
+</head>
+<body>
+  <div class="hdr"><h1>📁 Libro de Trabajo OTR</h1><p>Resumen: ${fecha} · ${trabajos.length} trabajos</p></div>
+  <div class="body">
+    <div class="kpis">
+      <div class="kpi a"><div class="kl">Total Facturado</div><div class="kv">${fCLP(totTotal)}</div></div>
+      <div class="kpi b"><div class="kl">Cobrado</div><div class="kv">${fCLP(totPagado)}</div></div>
+      <div class="kpi c"><div class="kl">Por Cobrar</div><div class="kv">${fCLP(totPend)}</div></div>
+      <div class="kpi d"><div class="kl">Atrasado</div><div class="kv">${fCLP(totAtra)}</div></div>
+    </div>
+    <div class="leg">
+      <div class="li"><div class="ld" style="background:#f5f3ff;border:2px solid #c4b5fd"></div>Pendiente Cotización</div>
+      <div class="li"><div class="ld" style="background:#fff7ed;border:2px solid #fdba74"></div>Pendiente OC</div>
+      <div class="li"><div class="ld" style="background:#fefce8;border:2px solid #fde047"></div>Espera de Pago</div>
+      <div class="li"><div class="ld" style="background:#fff1f2;border:2px solid #fca5a5"></div>Atrasado</div>
+      <div class="li"><div class="ld" style="background:#f0fdf4;border:2px solid #86efac"></div>Pagado</div>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr>
+          <th>#</th><th>Fecha Trabajo</th><th>Empresa</th><th>Responsable</th>
+          <th>Cotización</th><th>OC</th><th>N° Factura</th>
+          <th>Fecha Factura</th><th>Pago Esperado</th>
+          <th>Total c/IVA</th><th>IVA 19%</th><th>Neto s/IVA</th><th>Estado</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="ft">Generado desde Libro de Trabajo OTR · Solo lectura · IVA Chile 19%</div>
+  </div>
+</body></html>`;
+
+  const a=Object.assign(document.createElement('a'),{
+    href:URL.createObjectURL(new Blob([html],{type:'text/html;charset=utf-8'})),
+    download:`OTR_Resumen_${today()}.html`
+  });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  toast('📤 HTML exportado');
+}
+
+// ══════════════════════════════════════
+// INIT
+// ══════════════════════════════════════
+document.getElementById('header-date').textContent=
+  new Date().toLocaleDateString('es-CL',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+// ══════════════════════════════════════
+// RESPALDO / RESTAURAR (JSON)
+// ══════════════════════════════════════
+function respaldarJSON(){
+  const blob=new Blob([JSON.stringify({version:1,key:STORAGE_KEY,exportado:new Date().toISOString(),trabajos},null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='respaldo_libro_otr_'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  toast('💾 Respaldo descargado ('+trabajos.length+' trabajos)');
+}
+function restaurarJSON(input){
+  const f=input.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const d=JSON.parse(r.result);
+      const arr=Array.isArray(d)?d:d.trabajos;
+      if(!Array.isArray(arr)) throw new Error('formato');
+      if(trabajos.length && !confirm('Esto reemplazará los '+trabajos.length+' trabajos actuales por los '+arr.length+' del respaldo. ¿Continuar?')){ input.value=''; return; }
+      trabajos=arr; saveData(); render();
+      toast('📥 Restaurados '+arr.length+' trabajos');
+    }catch(e){ alert('El archivo no es un respaldo válido.'); }
+    input.value='';
+  };
+  r.readAsText(f);
+}
+
+// ══════════════════════════════════════
+// SINCRONIZACIÓN ONEDRIVE
+// ══════════════════════════════════════
+// Fusiona por trabajo: lo que cambió en este equipo + lo que cambió en OneDrive
+// desde la última sincronización (base). Si ambos editaron el mismo trabajo,
+// se combinan campo a campo; si uno borró y el otro editó, se conserva el editado.
+function mergeTrabajos(b, l, r) {
+  const canon = o => o ? JSON.stringify(Object.keys(o).sort().map(k=>[k,o[k]])) : '';
+  const toMap = a => new Map(a.map(t=>[String(t.id),t]));
+  const B=toMap(b), L=toMap(l), R=toMap(r);
+  const pick = id => {
+    const bo=B.get(id), lo=L.get(id), ro=R.get(id);
+    if (canon(lo)===canon(bo)) return ro;
+    if (canon(ro)===canon(bo)) return lo;
+    if (!lo) return ro;
+    if (!ro) return lo;
+    const out={...ro};
+    Object.keys(lo).forEach(k=>{ if (!bo || JSON.stringify(lo[k])!==JSON.stringify(bo[k])) out[k]=lo[k]; });
+    return out;
+  };
+  const nuevosLocales=[...L.keys()].filter(id=>!R.has(id)&&!B.has(id));
+  const editadosLocales=[...L.keys()].filter(id=>!R.has(id)&&B.has(id));
+  return [...new Set([...nuevosLocales, ...R.keys(), ...editadosLocales])].map(pick).filter(Boolean);
+}
+
+const Sync = (()=>{
+  const K_BASE=STORAGE_KEY+'_sync_base', K_ETAG=STORAGE_KEY+'_sync_etag', K_DIRTY=STORAGE_KEY+'_sync_dirty';
+  const ITEM='https://graph.microsoft.com/v1.0/me/drive/special/approot:/'+encodeURIComponent(SYNC_FILE);
+  let pca=null, account=null, timer=null, rev=0, lastOk=null;
+  let busy=false, again=false, needsLogin=false, offline=false, leaving=false;
+  let etag  = localStorage.getItem(K_ETAG)||'';
+  let dirty = localStorage.getItem(K_DIRTY)==='1';
+  let base  = (()=>{ try{ return JSON.parse(localStorage.getItem(K_BASE)||'[]'); }catch(e){ return []; } })();
+
+  function persist(){
+    localStorage.setItem(K_BASE, JSON.stringify(base));
+    localStorage.setItem(K_ETAG, etag);
+    localStorage.setItem(K_DIRTY, dirty?'1':'0');
+  }
+  const editingInline = () => !!document.querySelector('.inline-input');
+  function schedule(ms){ clearTimeout(timer); timer=setTimeout(sync, ms); }
+
+  async function token(){
+    try {
+      const r=await pca.acquireTokenSilent({scopes:SYNC_SCOPES, account});
+      needsLogin=false; return r.accessToken;
+    } catch(e) { needsLogin=true; throw e; }
+  }
+  async function gfetch(url, opt={}){
+    const tk=await token();
+    return fetch(url, {...opt, headers:{...(opt.headers||{}), Authorization:'Bearer '+tk}});
+  }
+
+  // null = el archivo aún no existe en OneDrive
+  async function fetchRemote(){
+    const m=await gfetch(ITEM);
+    if (m.status===404) return null;
+    if (!m.ok) throw new Error('OneDrive '+m.status);
+    const meta=await m.json();
+    if (meta.eTag===etag) return {etag};
+    const d=await fetch(meta['@microsoft.graph.downloadUrl'], {cache:'no-store'});
+    if (!d.ok) throw new Error('OneDrive descarga '+d.status);
+    const j=await d.json();
+    return {etag:meta.eTag, trabajos:Array.isArray(j)?j:(j.trabajos||[])};
+  }
+
+  async function upload(){
+    const r0=rev;
+    const snap=JSON.parse(JSON.stringify(trabajos));
+    const headers={'Content-Type':'application/json'};
+    if (etag) headers['If-Match']=etag;
+    const url=ITEM+':/content'+(etag?'':'?@microsoft.graph.conflictBehavior=fail');
+    const body=JSON.stringify({version:1, key:STORAGE_KEY, actualizado:new Date().toISOString(), trabajos:snap}, null, 1);
+    const res=await gfetch(url, {method:'PUT', headers, body});
+    if (res.status===412 || res.status===409) return false;   // alguien guardó antes: fusionar y reintentar
+    if (!res.ok) throw new Error('OneDrive '+res.status);
+    etag=(await res.json()).eTag; base=snap;
+    if (rev===r0) dirty=false;
+    persist(); return true;
+  }
+
+  async function sync(){
+    if (!pca || !account) return;
+    if (busy) { again=true; return; }
+    if (editingInline()) { schedule(2000); return; }
+    busy=true; ui();
+    try {
+      for (let i=0; i<4; i++) {
+        const remote=await fetchRemote();
+        if (remote===null) {
+          etag=''; base=[];
+          if (trabajos.length) dirty=true;
+        } else if (remote.etag!==etag) {
+          trabajos = dirty ? mergeTrabajos(base, trabajos, remote.trabajos) : remote.trabajos;
+          base=JSON.parse(JSON.stringify(remote.trabajos)); etag=remote.etag;
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(trabajos));
+          persist(); render();
+        }
+        if (!dirty || await upload()) break;
+      }
+      offline=false; lastOk=new Date();
+    } catch(e) {
+      console.warn('Sync OneDrive:', e);
+      offline=!needsLogin;
+    }
+    busy=false; ui();
+    if (again) { again=false; schedule(500); }
+  }
+
+  function markDirty(){
+    dirty=true; rev++;
+    localStorage.setItem(K_DIRTY,'1');
+    ui(); schedule(800);
+  }
+
+  function ui(){
+    const b=document.getElementById('sync-btn'), out=document.getElementById('sync-logout');
+    const ban=document.getElementById('sync-banner'), bt=document.getElementById('sync-banner-text');
+    let txt, cls='';
+    if (!MS_CLIENT_ID)    { txt='☁️ Sin configurar'; cls='warn'; }
+    else if (!account)    { txt='☁️ Conectar OneDrive'; }
+    else if (needsLogin)  { txt='🔑 Reconectar'; cls='warn'; }
+    else if (busy)        { txt='⏳ Sincronizando…'; cls='busy'; }
+    else if (offline)     { txt=dirty?'📴 Sin conexión · pendiente':'📴 Sin conexión'; cls='warn'; }
+    else if (dirty)       { txt='⏳ Guardando…'; cls='busy'; }
+    else                  { txt='☁️ Sincronizado'; cls='ok'; }
+    b.textContent=txt;
+    b.className='btn btn-ghost btn-sync '+cls;
+    b.title=account ? 'OneDrive: '+account.username+(lastOk?' · última sincronización '+lastOk.toLocaleTimeString('es-CL'):'') : '';
+    out.style.display=account?'':'none';
+
+    const showBanner=!MS_CLIENT_ID || !account || needsLogin;
+    ban.classList.toggle('show', showBanner);
+    ban.querySelector('.btn').style.display=MS_CLIENT_ID?'':'none';
+    bt.textContent = !MS_CLIENT_ID ? '⚙️ Falta configurar el ID de la aplicación de Microsoft (MS_CLIENT_ID).'
+                   : needsLogin   ? '🔑 La sesión de OneDrive expiró. Vuelve a conectar para seguir sincronizando (tus cambios quedan guardados en este equipo).'
+                   : '☁️ Conecta tu OneDrive para ver y guardar tus trabajos en todos tus equipos.';
+  }
+
+  async function login(){
+    if (!pca) { toast('⚠️ OneDrive no disponible'); return; }
+    leaving=true;
+    if (account) return pca.acquireTokenRedirect({scopes:SYNC_SCOPES, account});
+    return pca.loginRedirect({scopes:SYNC_SCOPES, prompt:'select_account'});
+  }
+
+  function onClick(){
+    if (!account || needsLogin) return login();
+    toast('🔄 Sincronizando…'); schedule(0);
+  }
+
+  async function logout(){
+    if (!account) return;
+    const msg = dirty
+      ? 'Hay cambios que aún no se subieron a OneDrive y se perderán en este equipo. ¿Desconectar igual?'
+      : '¿Desconectar OneDrive en este equipo? Tus datos siguen en OneDrive; aquí se borra la copia local.';
+    if (!confirm(msg)) return;
+    leaving=true;
+    [STORAGE_KEY, K_BASE, K_ETAG, K_DIRTY].forEach(k=>localStorage.removeItem(k));
+    await pca.logoutRedirect({account, postLogoutRedirectUri:location.origin+location.pathname});
+  }
+
+  async function init(){
+    ui();
+    if (!MS_CLIENT_ID || !window.msal) return;
+    pca=new msal.PublicClientApplication({
+      auth:  { clientId:MS_CLIENT_ID, authority:'https://login.microsoftonline.com/consumers',
+               redirectUri:location.origin+location.pathname.replace(/index\.html$/,'') },
+      cache: { cacheLocation:'localStorage' },
+    });
+    await pca.initialize();
+    try {
+      const r=await pca.handleRedirectPromise();
+      if (r && r.account) account=r.account;
+    } catch(e) { console.warn(e); toast('⚠️ No se pudo iniciar sesión en Microsoft'); }
+    account=account || pca.getAllAccounts()[0] || null;
+    if (account) pca.setActiveAccount(account);
+    ui();
+    if (account) sync();
+
+    document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState==='visible') schedule(300); });
+    window.addEventListener('focus',  ()=>schedule(300));
+    window.addEventListener('online', ()=>{ offline=false; schedule(300); });
+    setInterval(()=>{ if (document.visibilityState==='visible') sync(); }, 45000);
+    window.addEventListener('beforeunload', e=>{ if (dirty && account && !offline && !leaving) { e.preventDefault(); e.returnValue=''; } });
+  }
+
+  return { init, markDirty, login, logout, onClick, sync };
+})();
+
+loadData();
+render();
+Sync.init();
+</script>
+</body>
+</html>
