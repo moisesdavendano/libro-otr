@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>📁 Libro de Trabajo OTR</title>
-  <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@4.30.0/lib/msal-browser.min.js"></script>
   <style>
     :root {
       --font: 'Segoe UI', system-ui, sans-serif;
@@ -186,8 +185,8 @@
     <button class="btn btn-ghost" onclick="respaldarJSON()">💾 Respaldo</button>
     <button class="btn btn-ghost" onclick="document.getElementById('file-restore').click()">📥 Restaurar</button>
     <input type="file" id="file-restore" accept=".json,application/json" style="display:none" onchange="restaurarJSON(this)">
-    <button class="btn btn-ghost btn-sync" id="sync-btn" onclick="Sync.onClick()">☁️ OneDrive</button>
-    <button class="btn btn-ghost" id="sync-logout" onclick="Sync.logout()" title="Desconectar OneDrive en este equipo" style="display:none">🚪</button>
+    <button class="btn btn-ghost btn-sync" id="sync-btn" onclick="Sync.onClick()">🔒 Entrar</button>
+    <button class="btn btn-ghost" id="sync-logout" onclick="Sync.logout()" title="Cerrar sesión en este equipo" style="display:none">🚪</button>
   </div>
 </header>
 
@@ -195,8 +194,8 @@
 
   <!-- Aviso de conexión -->
   <div class="sync-banner" id="sync-banner">
-    <span id="sync-banner-text">☁️ Conecta tu OneDrive para ver y guardar tus trabajos en todos tus equipos.</span>
-    <button class="btn" onclick="Sync.login()">Iniciar sesión con Microsoft</button>
+    <span id="sync-banner-text">🔒 Ingresa tu contraseña para ver tus trabajos.</span>
+    <button class="btn" onclick="Sync.login()">Entrar</button>
   </div>
 
   <!-- KPIs -->
@@ -355,6 +354,30 @@
   </div>
 </div>
 
+<!-- MODAL CONEXIÓN -->
+<div class="modal-overlay" id="login-overlay" onclick="if(event.target===this) Sync.closeLogin()">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header">
+      <h2>🔒 Libro de Trabajo OTR</h2>
+      <button class="modal-close" onclick="Sync.closeLogin()">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="login-form" onsubmit="Sync.submitClave(event)">
+        <div class="form-group">
+          <label>Contraseña</label>
+          <input type="password" id="login-clave" autocomplete="current-password" autocapitalize="off" spellcheck="false" />
+        </div>
+        <p style="font-size:.78rem;color:var(--text-muted);margin-top:10px">Se pide una sola vez por equipo y queda guardada solo en este navegador.</p>
+        <p id="login-error" style="font-size:.8rem;margin-top:8px;color:#dc2626"></p>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" style="background:#f1f5f9;color:#475569" onclick="Sync.closeLogin()">Cancelar</button>
+      <button class="btn btn-success" onclick="document.getElementById('login-form').requestSubmit()">Entrar</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -366,10 +389,8 @@ const IVA_RATE     = 0.19;
 const PAYMENT_DAYS = 30;
 const STORAGE_KEY  = 'otr_trabajos_2026';
 
-// OneDrive: ID de la aplicación registrada en Microsoft (ver GUIA_INSTALACION)
-const MS_CLIENT_ID = '';
-const SYNC_FILE    = 'libro_otr.json';
-const SYNC_SCOPES  = ['Files.ReadWrite.AppFolder'];
+// Sincronización: los datos se guardan en Netlify (ver GUIA_INSTALACION)
+const API_URL = '/api/datos';
 
 const ESTADOS = {
   'pendiente-cotizacion': { label:'Pendiente Cotización', icon:'📋', rowBg:'#f5f3ff', badge:'#6d28d9', badgeBg:'#ede9fe', bd:'#c4b5fd' },
@@ -630,7 +651,7 @@ function startEdit(cell, id, field, type) {
   const save=()=>{
     if (saved) return; saved=true;
     const val=input.value.trim();
-    // la lista pudo refrescarse desde OneDrive mientras se editaba
+    // la lista pudo refrescarse desde la nube mientras se editaba
     const cur=trabajos.find(x=>x.id===id)||t;
     cur[field]=val;
     if (field==='fechaFactura' && val && !cur.fechaPagoEsperada)
@@ -914,9 +935,9 @@ function restaurarJSON(input){
 }
 
 // ══════════════════════════════════════
-// SINCRONIZACIÓN ONEDRIVE
+// SINCRONIZACIÓN AUTOMÁTICA
 // ══════════════════════════════════════
-// Fusiona por trabajo: lo que cambió en este equipo + lo que cambió en OneDrive
+// Fusiona por trabajo: lo que cambió en este equipo + lo que cambió en la nube
 // desde la última sincronización (base). Si ambos editaron el mismo trabajo,
 // se combinan campo a campo; si uno borró y el otro editó, se conserva el editado.
 function mergeTrabajos(b, l, r) {
@@ -939,10 +960,9 @@ function mergeTrabajos(b, l, r) {
 }
 
 const Sync = (()=>{
-  const K_BASE=STORAGE_KEY+'_sync_base', K_ETAG=STORAGE_KEY+'_sync_etag', K_DIRTY=STORAGE_KEY+'_sync_dirty';
-  const ITEM='https://graph.microsoft.com/v1.0/me/drive/special/approot:/'+encodeURIComponent(SYNC_FILE);
-  let pca=null, account=null, timer=null, rev=0, lastOk=null;
-  let busy=false, again=false, needsLogin=false, offline=false, leaving=false;
+  const K_BASE=STORAGE_KEY+'_sync_base', K_ETAG=STORAGE_KEY+'_sync_etag', K_DIRTY=STORAGE_KEY+'_sync_dirty', K_CLAVE='otr_clave';
+  let clave=localStorage.getItem(K_CLAVE)||'', timer=null, rev=0, lastOk=null;
+  let busy=false, again=false, needsLogin=false, offline=false;
   let etag  = localStorage.getItem(K_ETAG)||'';
   let dirty = localStorage.getItem(K_DIRTY)==='1';
   let base  = (()=>{ try{ return JSON.parse(localStorage.getItem(K_BASE)||'[]'); }catch(e){ return []; } })();
@@ -955,28 +975,19 @@ const Sync = (()=>{
   const editingInline = () => !!document.querySelector('.inline-input');
   function schedule(ms){ clearTimeout(timer); timer=setTimeout(sync, ms); }
 
-  async function token(){
-    try {
-      const r=await pca.acquireTokenSilent({scopes:SYNC_SCOPES, account});
-      needsLogin=false; return r.accessToken;
-    } catch(e) { needsLogin=true; throw e; }
-  }
-  async function gfetch(url, opt={}){
-    const tk=await token();
-    return fetch(url, {...opt, headers:{...(opt.headers||{}), Authorization:'Bearer '+tk}});
+  async function api(opt={}, k=clave){
+    const res=await fetch(API_URL, {...opt, cache:'no-store', headers:{...(opt.headers||{}), 'x-clave':k}});
+    if (res.status===401) { needsLogin=true; throw new Error('Contraseña incorrecta'); }
+    needsLogin=false;
+    return res;
   }
 
-  // null = el archivo aún no existe en OneDrive
+  // null = todavía no hay datos guardados en la nube
   async function fetchRemote(){
-    const m=await gfetch(ITEM);
-    if (m.status===404) return null;
-    if (!m.ok) throw new Error('OneDrive '+m.status);
-    const meta=await m.json();
-    if (meta.eTag===etag) return {etag};
-    const d=await fetch(meta['@microsoft.graph.downloadUrl'], {cache:'no-store'});
-    if (!d.ok) throw new Error('OneDrive descarga '+d.status);
-    const j=await d.json();
-    return {etag:meta.eTag, trabajos:Array.isArray(j)?j:(j.trabajos||[])};
+    const res=await api();
+    if (res.status===404) return null;
+    if (!res.ok) throw new Error('Servidor '+res.status);
+    return res.json();
   }
 
   async function upload(){
@@ -984,18 +995,16 @@ const Sync = (()=>{
     const snap=JSON.parse(JSON.stringify(trabajos));
     const headers={'Content-Type':'application/json'};
     if (etag) headers['If-Match']=etag;
-    const url=ITEM+':/content'+(etag?'':'?@microsoft.graph.conflictBehavior=fail');
-    const body=JSON.stringify({version:1, key:STORAGE_KEY, actualizado:new Date().toISOString(), trabajos:snap}, null, 1);
-    const res=await gfetch(url, {method:'PUT', headers, body});
-    if (res.status===412 || res.status===409) return false;   // alguien guardó antes: fusionar y reintentar
-    if (!res.ok) throw new Error('OneDrive '+res.status);
-    etag=(await res.json()).eTag; base=snap;
+    const res=await api({method:'PUT', headers, body:JSON.stringify({trabajos:snap})});
+    if (res.status===412) return false;   // otro equipo guardó antes: fusionar y reintentar
+    if (!res.ok) throw new Error('Servidor '+res.status);
+    etag=(await res.json()).etag; base=snap;
     if (rev===r0) dirty=false;
     persist(); return true;
   }
 
   async function sync(){
-    if (!pca || !account) return;
+    if (!clave || needsLogin) { ui(); return; }
     if (busy) { again=true; return; }
     if (editingInline()) { schedule(2000); return; }
     busy=true; ui();
@@ -1015,92 +1024,94 @@ const Sync = (()=>{
       }
       offline=false; lastOk=new Date();
     } catch(e) {
-      console.warn('Sync OneDrive:', e);
+      console.warn('Sync:', e);
       offline=!needsLogin;
     }
     busy=false; ui();
+    if (needsLogin) login();
     if (again) { again=false; schedule(500); }
   }
 
   function markDirty(){
     dirty=true; rev++;
     localStorage.setItem(K_DIRTY,'1');
-    ui(); schedule(800);
+    ui(); schedule(600);
   }
 
   function ui(){
     const b=document.getElementById('sync-btn'), out=document.getElementById('sync-logout');
     const ban=document.getElementById('sync-banner'), bt=document.getElementById('sync-banner-text');
     let txt, cls='';
-    if (!MS_CLIENT_ID)    { txt='☁️ Sin configurar'; cls='warn'; }
-    else if (!account)    { txt='☁️ Conectar OneDrive'; }
-    else if (needsLogin)  { txt='🔑 Reconectar'; cls='warn'; }
-    else if (busy)        { txt='⏳ Sincronizando…'; cls='busy'; }
-    else if (offline)     { txt=dirty?'📴 Sin conexión · pendiente':'📴 Sin conexión'; cls='warn'; }
-    else if (dirty)       { txt='⏳ Guardando…'; cls='busy'; }
-    else                  { txt='☁️ Sincronizado'; cls='ok'; }
+    if (!clave)           { txt='🔒 Entrar'; }
+    else if (needsLogin)  { txt='🔒 Entrar'; cls='warn'; }
+    else if (offline)     { txt=dirty?'📴 Sin internet · se guardará al volver':'📴 Sin internet'; cls='warn'; }
+    else if (busy||dirty) { txt='☁️ Guardando…'; cls='busy'; }
+    else                  { txt='☁️ Al día'; cls='ok'; }
     b.textContent=txt;
     b.className='btn btn-ghost btn-sync '+cls;
-    b.title=account ? 'OneDrive: '+account.username+(lastOk?' · última sincronización '+lastOk.toLocaleTimeString('es-CL'):'') : '';
-    out.style.display=account?'':'none';
+    b.title=clave && lastOk ? 'Última actualización '+lastOk.toLocaleTimeString('es-CL') : '';
+    out.style.display=clave?'':'none';
 
-    const showBanner=!MS_CLIENT_ID || !account || needsLogin;
-    ban.classList.toggle('show', showBanner);
-    ban.querySelector('.btn').style.display=MS_CLIENT_ID?'':'none';
-    bt.textContent = !MS_CLIENT_ID ? '⚙️ Falta configurar el ID de la aplicación de Microsoft (MS_CLIENT_ID).'
-                   : needsLogin   ? '🔑 La sesión de OneDrive expiró. Vuelve a conectar para seguir sincronizando (tus cambios quedan guardados en este equipo).'
-                   : '☁️ Conecta tu OneDrive para ver y guardar tus trabajos en todos tus equipos.';
+    ban.classList.toggle('show', !clave || needsLogin);
+    bt.textContent = needsLogin
+      ? '🔒 La contraseña cambió. Ingrésala de nuevo (tus cambios quedan guardados en este equipo).'
+      : '🔒 Ingresa tu contraseña para ver tus trabajos.';
   }
 
-  async function login(){
-    if (!pca) { toast('⚠️ OneDrive no disponible'); return; }
-    leaving=true;
-    if (account) return pca.acquireTokenRedirect({scopes:SYNC_SCOPES, account});
-    return pca.loginRedirect({scopes:SYNC_SCOPES, prompt:'select_account'});
+  function login(){
+    document.getElementById('login-clave').value='';
+    document.getElementById('login-error').textContent='';
+    document.getElementById('login-overlay').classList.add('open');
+    setTimeout(()=>document.getElementById('login-clave').focus(), 50);
+  }
+  function closeLogin(){ document.getElementById('login-overlay').classList.remove('open'); }
+
+  async function submitClave(e){
+    e.preventDefault();
+    const k=document.getElementById('login-clave').value;
+    const err=document.getElementById('login-error');
+    if (!k) return;
+    err.textContent='Verificando…';
+    const prev=needsLogin;
+    try {
+      const res=await api({}, k);
+      if (!res.ok && res.status!==404) throw new Error('El servidor respondió '+res.status+'. Intenta de nuevo.');
+    } catch(ex) {
+      err.textContent='❌ '+(needsLogin ? 'Contraseña incorrecta.' : (navigator.onLine ? ex.message : 'Sin internet.'));
+      needsLogin=prev;
+      return;
+    }
+    clave=k; needsLogin=false;
+    localStorage.setItem(K_CLAVE, k);
+    closeLogin(); sync();
   }
 
   function onClick(){
-    if (!account || needsLogin) return login();
-    toast('🔄 Sincronizando…'); schedule(0);
+    if (!clave || needsLogin) return login();
+    schedule(0);
   }
 
-  async function logout(){
-    if (!account) return;
+  function logout(){
+    if (!clave) return;
     const msg = dirty
-      ? 'Hay cambios que aún no se subieron a OneDrive y se perderán en este equipo. ¿Desconectar igual?'
-      : '¿Desconectar OneDrive en este equipo? Tus datos siguen en OneDrive; aquí se borra la copia local.';
+      ? 'Hay cambios que aún no se subieron y se perderán en este equipo. ¿Salir igual?'
+      : '¿Cerrar sesión en este equipo? Tus datos siguen guardados en la nube; aquí se borra la copia local.';
     if (!confirm(msg)) return;
-    leaving=true;
-    [STORAGE_KEY, K_BASE, K_ETAG, K_DIRTY].forEach(k=>localStorage.removeItem(k));
-    await pca.logoutRedirect({account, postLogoutRedirectUri:location.origin+location.pathname});
+    [K_CLAVE, STORAGE_KEY, K_BASE, K_ETAG, K_DIRTY].forEach(k=>localStorage.removeItem(k));
+    location.reload();
   }
 
-  async function init(){
+  function init(){
     ui();
-    if (!MS_CLIENT_ID || !window.msal) return;
-    pca=new msal.PublicClientApplication({
-      auth:  { clientId:MS_CLIENT_ID, authority:'https://login.microsoftonline.com/consumers',
-               redirectUri:location.origin+location.pathname.replace(/index\.html$/,'') },
-      cache: { cacheLocation:'localStorage' },
-    });
-    await pca.initialize();
-    try {
-      const r=await pca.handleRedirectPromise();
-      if (r && r.account) account=r.account;
-    } catch(e) { console.warn(e); toast('⚠️ No se pudo iniciar sesión en Microsoft'); }
-    account=account || pca.getAllAccounts()[0] || null;
-    if (account) pca.setActiveAccount(account);
-    ui();
-    if (account) sync();
-
+    if (clave) sync(); else login();
     document.addEventListener('visibilitychange', ()=>{ if (document.visibilityState==='visible') schedule(300); });
     window.addEventListener('focus',  ()=>schedule(300));
     window.addEventListener('online', ()=>{ offline=false; schedule(300); });
-    setInterval(()=>{ if (document.visibilityState==='visible') sync(); }, 45000);
-    window.addEventListener('beforeunload', e=>{ if (dirty && account && !offline && !leaving) { e.preventDefault(); e.returnValue=''; } });
+    setInterval(()=>{ if (document.visibilityState==='visible') sync(); }, 30000);
+    window.addEventListener('beforeunload', e=>{ if (dirty && clave && !offline && !needsLogin) { e.preventDefault(); e.returnValue=''; } });
   }
 
-  return { init, markDirty, login, logout, onClick, sync };
+  return { init, markDirty, login, closeLogin, submitClave, logout, onClick, sync };
 })();
 
 loadData();
