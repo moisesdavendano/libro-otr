@@ -962,7 +962,7 @@ function mergeTrabajos(b, l, r) {
 const Sync = (()=>{
   const K_BASE=STORAGE_KEY+'_sync_base', K_ETAG=STORAGE_KEY+'_sync_etag', K_DIRTY=STORAGE_KEY+'_sync_dirty', K_CLAVE='otr_clave';
   let clave=localStorage.getItem(K_CLAVE)||'', timer=null, rev=0, lastOk=null;
-  let busy=false, again=false, needsLogin=false, offline=false;
+  let busy=false, again=false, needsLogin=false, offline=false, errMsg='';
   let etag  = localStorage.getItem(K_ETAG)||'';
   let dirty = localStorage.getItem(K_DIRTY)==='1';
   let base  = (()=>{ try{ return JSON.parse(localStorage.getItem(K_BASE)||'[]'); }catch(e){ return []; } })();
@@ -976,7 +976,7 @@ const Sync = (()=>{
   function schedule(ms){ clearTimeout(timer); timer=setTimeout(sync, ms); }
 
   async function api(opt={}, k=clave){
-    const res=await fetch(API_URL, {...opt, cache:'no-store', headers:{...(opt.headers||{}), 'x-clave':k}});
+    const res=await fetch(API_URL, {...opt, cache:'no-store', signal:AbortSignal.timeout(20000), headers:{...(opt.headers||{}), 'x-clave':k}});
     if (res.status===401) { needsLogin=true; throw new Error('Contraseña incorrecta'); }
     needsLogin=false;
     return res;
@@ -993,9 +993,7 @@ const Sync = (()=>{
   async function upload(){
     const r0=rev;
     const snap=JSON.parse(JSON.stringify(trabajos));
-    const headers={'Content-Type':'application/json'};
-    if (etag) headers['If-Match']=etag;
-    const res=await api({method:'PUT', headers, body:JSON.stringify({trabajos:snap})});
+    const res=await api({method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({etag, trabajos:snap})});
     if (res.status===412) return false;   // otro equipo guardó antes: fusionar y reintentar
     if (!res.ok) throw new Error('Servidor '+res.status);
     etag=(await res.json()).etag; base=snap;
@@ -1009,7 +1007,8 @@ const Sync = (()=>{
     if (editingInline()) { schedule(2000); return; }
     busy=true; ui();
     try {
-      for (let i=0; i<4; i++) {
+      let listo=false;
+      for (let i=0; i<4 && !listo; i++) {
         const remote=await fetchRemote();
         if (remote===null) {
           etag=''; base=[];
@@ -1020,12 +1019,13 @@ const Sync = (()=>{
           localStorage.setItem(STORAGE_KEY, JSON.stringify(trabajos));
           persist(); render();
         }
-        if (!dirty || await upload()) break;
+        listo=!dirty || await upload();
       }
-      offline=false; lastOk=new Date();
+      if (!listo) throw new Error('El servidor rechazó el guardado (412)');
+      offline=false; errMsg=''; lastOk=new Date();
     } catch(e) {
       console.warn('Sync:', e);
-      offline=!needsLogin;
+      offline=!needsLogin; errMsg=e.message;
     }
     busy=false; ui();
     if (needsLogin) login();
@@ -1044,12 +1044,13 @@ const Sync = (()=>{
     let txt, cls='';
     if (!clave)           { txt='🔒 Entrar'; }
     else if (needsLogin)  { txt='🔒 Entrar'; cls='warn'; }
-    else if (offline)     { txt=dirty?'📴 Sin internet · se guardará al volver':'📴 Sin internet'; cls='warn'; }
+    else if (offline && !navigator.onLine) { txt=dirty?'📴 Sin internet · se guardará al volver':'📴 Sin internet'; cls='warn'; }
+    else if (offline)     { txt='⚠️ No se pudo guardar · reintentando'; cls='warn'; }
     else if (busy||dirty) { txt='☁️ Guardando…'; cls='busy'; }
     else                  { txt='☁️ Al día'; cls='ok'; }
     b.textContent=txt;
     b.className='btn btn-ghost btn-sync '+cls;
-    b.title=clave && lastOk ? 'Última actualización '+lastOk.toLocaleTimeString('es-CL') : '';
+    b.title=errMsg || (clave && lastOk ? 'Última actualización '+lastOk.toLocaleTimeString('es-CL') : '');
     out.style.display=clave?'':'none';
 
     ban.classList.toggle('show', !clave || needsLogin);

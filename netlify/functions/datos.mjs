@@ -27,23 +27,27 @@ export default async (req) => {
 
   const store = getStore({ name: 'libro', consistency: 'strong' });
 
+  // Cada guardado lleva un número de versión propio (rev); 'v0' = guardado antes de existir rev
+  const leer = () => store.get(KEY, { type: 'json' });
+  const versionDe = doc => doc ? (doc.rev || 'v0') : '';
+
   if (req.method === 'GET') {
-    const r = await store.getWithMetadata(KEY, { type: 'json' });
-    if (!r) return json(404, {});
-    return json(200, { etag: r.etag, trabajos: r.data.trabajos || [] });
+    const doc = await leer();
+    if (!doc) return json(404, {});
+    return json(200, { etag: versionDe(doc), trabajos: doc.trabajos || [] });
   }
 
   if (req.method === 'PUT') {
     const body = await req.json().catch(() => ({}));
     if (!Array.isArray(body.trabajos)) return json(400, { error: 'Formato inválido' });
-    const doc = { version: 1, actualizado: new Date().toISOString(), trabajos: body.trabajos };
-    const ifMatch = req.headers.get('if-match');
     // Solo guarda si nadie más guardó desde la última lectura de este equipo
-    const res = await store.setJSON(KEY, doc, ifMatch ? { onlyIfMatch: ifMatch } : { onlyIfNew: true });
-    if (!res.modified) return json(412, {});
+    if ((body.etag || '') !== versionDe(await leer())) return json(412, {});
+    const doc = { version: 1, rev: crypto.randomUUID(), actualizado: new Date().toISOString(), trabajos: body.trabajos };
+    await store.setJSON(KEY, doc);
     // Respaldo diario automático (queda la última versión de cada día)
-    await store.setJSON('respaldos/' + doc.actualizado.slice(0, 10), doc);
-    return json(200, { etag: res.etag });
+    await store.setJSON('respaldos/' + doc.actualizado.slice(0, 10), doc)
+      .catch(e => console.warn('No se pudo escribir el respaldo:', e));
+    return json(200, { etag: doc.rev });
   }
 
   return json(405, {});
